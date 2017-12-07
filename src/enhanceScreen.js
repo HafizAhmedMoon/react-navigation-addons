@@ -4,6 +4,7 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import hoist from 'hoist-non-react-statics';
 import shallowEqual from 'shallowequal';
+import { NavigationActions } from 'react-navigation';
 
 import type {
   NavigationState,
@@ -25,13 +26,50 @@ type Context = {
 
 const COUNT_PARAM = '__react_navigation_addons_update_count';
 
+const ScreenNavigationOptions = {
+  title: {isFunction: false},
+  headerTitle: {isFunction: false},
+  header: {isFunction: true},
+  headerRight: {isFunction: true},
+  headerLeft: {isFunction: true},
+
+  tabBarIcon: {isFunction: true},
+  tabBarLabel: {isFunction: true},
+
+  drawerLabel: {isFunction: true},
+  drawerIcon: {isFunction: true},
+};
+
+const NavigationExtra = {
+  setOptions: () => null,
+  getParent: () => ({}),
+  addListener: () => null,
+  removeListener: () => null,
+  setParams: () => null,
+  getState: function (navigation) {
+    return navigation && navigation.state ?
+      getActiveRouteState(navigation.state) : this && this.state && getActiveRouteState(this.state) || {};
+  },
+  replace: function (routes, index) {
+    if (!(this && this.navigation)) return;
+    this.navigation.dispatch(NavigationActions.reset({
+      index: index === undefined ? routes.length - 1 : index,
+      actions: routes.map(route => NavigationActions.navigate(route))
+    }));
+  }
+};
+
 export default function enhanceScreen<T: *>(
   ScreenComponent: ReactClass<T>,
 ): ReactClass<T> {
+  let _instance;
+
   class EnhancedScreen extends Component<void, T, void> {
     static displayName = `enhancedScreen(${ScreenComponent.displayName || ScreenComponent.name})`;
 
-    static navigationOptions = ScreenComponent.navigationOptions;
+    static _navigationOptions = ScreenComponent.navigationOptions;
+    static _routerNavigationOptions = null;
+    static navigationOptions = NavigationOptions;
 
     static contextTypes = {
       getParentNavigation: PropTypes.func,
@@ -42,6 +80,11 @@ export default function enhanceScreen<T: *>(
     static childContextTypes = {
       navigation: PropTypes.object,
     };
+
+    constructor(...args) {
+      super(...args);
+      _instance = this;
+    }
 
     getChildContext() {
       return {
@@ -75,7 +118,7 @@ export default function enhanceScreen<T: *>(
 
       return (
         !shallowEqual(this.props, nextProps) ||
-        !shallowEqual(this.state, nextState)
+        !shallowEqual(state, nextState)
       );
     }
 
@@ -87,26 +130,13 @@ export default function enhanceScreen<T: *>(
 
     context: Context;
 
-    _previousOptions = ScreenComponent.navigationOptions || {};
     _updateCount = 0;
     _listeners: { [key: ListenerName]: Array<Listener> } = {};
     _focused: boolean = false;
 
     _setOptions = options => {
-      let nextOptions;
-
-      if (
-        typeof this._previousOptions === 'object' &&
-        typeof options === 'object'
-      ) {
-        nextOptions = { ...this._previousOptions, ...options };
-      } else {
-        nextOptions = options;
-      }
-
-      EnhancedScreen.navigationOptions = nextOptions;
-      this.props.navigation.setParams({ [COUNT_PARAM]: this._updateCount });
-      this._previousOptions = nextOptions;
+      EnhancedScreen._routerNavigationOptions = options;
+      this.setParams({[COUNT_PARAM]: this._updateCount});
       this._updateCount++;
     };
 
@@ -146,13 +176,26 @@ export default function enhanceScreen<T: *>(
       }
     };
 
+    setParams = (params) => {
+      const {navigation} = this.props;
+      setNavigationParams(navigation, params);
+    };
+
     get _navigation() {
       return {
         ...this.props.navigation,
-        setOptions: this._setOptions,
-        getParent: this._getParent,
-        addListener: this._addListener,
-        removeListener: this._removeListener,
+        ...this._navigationExtra
+      };
+    }
+
+    get _navigationExtra() {
+      return {
+        ...NavigationExtra,
+        setOptions: this._setOptions.bind(this),
+        getParent: this._getParent.bind(this),
+        addListener: this._addListener.bind(this),
+        removeListener: this._removeListener.bind(this),
+        setParams: this.setParams.bind(this),
       };
     }
 
@@ -164,4 +207,52 @@ export default function enhanceScreen<T: *>(
   hoist(ScreenComponent, EnhancedScreen);
 
   return EnhancedScreen;
+
+  function NavigationOptions(config) {
+    config.navigation = {
+      ...config.navigation,
+      ...(_instance && _instance._navigationExtra || NavigationExtra)
+    };
+
+    let navigationOptions = {
+      ...getNavigationOptions(EnhancedScreen._navigationOptions, config)
+    };
+
+    navigationOptions = {
+      ...navigationOptions,
+      ...getNavigationOptions(EnhancedScreen._routerNavigationOptions, {...config, navigationOptions})
+    };
+
+    Object.keys(ScreenNavigationOptions).forEach(name => {
+      const {isFunction} = ScreenNavigationOptions[name];
+      if (isFunction && typeof navigationOptions[name] === "function") {
+        const func = navigationOptions[name];
+        navigationOptions[name] = _config => {
+          return func({..._config, navigation: {...config.navigation, state: _config.navigation.state}});
+        };
+      }
+    });
+    return navigationOptions;
+  }
+}
+
+function getNavigationOptions(options, config) {
+  if (typeof options === "function") {
+    return options(config);
+  } else if (typeof options === "object") {
+    return options;
+  }
+  return {};
+}
+
+function getActiveRouteState(state) {
+  if (state.routes) {
+    return getActiveRouteState(state.routes[state.index]);
+  }
+  return state;
+}
+
+function setNavigationParams(navigation, params) {
+  const {key} = getActiveRouteState(navigation.state);
+  navigation.dispatch(NavigationActions.setParams({params, key}));
 }
