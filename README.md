@@ -58,7 +58,43 @@ class HomeScreen extends Component {
 }
 ```
 
-Calling `setOptions` with an plain object does a merge with previous options. You don't have to pass the full configuration object again.
+~~Calling `setOptions` with an plain object does a merge with previous options. You don't have to pass the full configuration object again.~~
+
+*It can be a function too and does not update current navigationOptions.*
+
+*`navigationOptions` as `function` also works with it.*
+
+```js
+class HomeScreen extends Component {
+  static navigationOptions = ({navigation}) => {
+    const params = navigation.getState().params;
+    return {
+      headerTitle: params.user,
+    }
+  };
+  
+  componentWillMount() {
+    this.headerLeft = (
+      <TouchableOpacity onPress={this._handleSave}>
+        <Text>Save</Text>
+      </TouchableOpacity>
+    );
+    this.props.navigation.setOptions({
+      headerTintColor: this.props.theme.tintColor,
+      headerLeft: this.headerLeft
+    });
+  }
+
+  componentWillReceiveProps(nextProps) {
+    this.props.navigation.setOptions({
+      headerTintColor: nextProps.theme.tintColor,
+      headerLeft: this.headerLeft
+    });
+  }
+
+  // ...
+}
+```
 
 ### `navigation.addListener`
 
@@ -139,3 +175,59 @@ class SettingsScreen extends Component {
 ```
 
 If there's no parent navigator, this method will return `undefined`.
+
+### `navigation.getState`
+
+This method is returns the current state of Route.
+
+**Example:**
+
+```js
+class DetailsScreen extends Component {
+  static navigationOptions = ({navigation}) => {
+    const params = navigation.getState().params;
+    return {
+      title: params && params.title
+    };
+  }
+  
+  // ...
+}
+```
+
+### `navigation.setParams`
+
+This method is short and alternate way to setParams of current Route.
+
+**Example:**
+
+```js
+class DetailsScreen extends Component {
+  changeItem = (item) => {
+    this.props.navigation.setParams({item});
+  };
+  
+  // ...
+}
+```
+
+### `navigation.replace`
+
+This method is short and alternate way to reset routes.
+
+**Example:**
+
+```js
+class GameOverScreen extends Component {
+  startOver = (item) => {
+    this.props.navigation.replace([
+      {routeName: 'Home'},
+      {routeName: 'Play'}
+    ]);
+  };
+  
+  // ...
+}
+```
+
+Second parameter take **index** which is *optional*, defaults it to array's last route.
