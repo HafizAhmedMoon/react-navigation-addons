@@ -50,9 +50,19 @@ const NavigationExtra = {
     return navigation && navigation.state ?
       getActiveRouteState(navigation.state) : this && this.state && getActiveRouteState(this.state) || {};
   },
-  replace: function (routes, index) {
-    if (!(this && this.navigation)) return;
-    this.navigation.dispatch(NavigationActions.reset({
+  replace: function (...args) {
+    if (!(this && this.dispatch)) return;
+    let routes, index, routeName, params;
+    [routes, index] = args;
+    if (!Array.isArray(routes)) {
+      if (typeof routes === "string"){
+        [routeName, params] = args;
+        routes = [{routeName, params}]
+      } else {
+        routes = [args[0]]
+      }
+    }
+    this.dispatch(NavigationActions.reset({
       index: index === undefined ? routes.length - 1 : index,
       actions: routes.map(route => NavigationActions.navigate(route))
     }));

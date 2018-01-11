@@ -220,10 +220,21 @@ This method is short and alternate way to reset routes.
 ```js
 class GameOverScreen extends Component {
   startOver = (item) => {
-    this.props.navigation.replace([
+    const {navigation} = this.props;
+    navigation.replace([
       {routeName: 'Home'},
       {routeName: 'Play'}
     ]);
+    // or
+    this.props.navigation.replace.call(this.props.navigation, [
+      {routeName: 'Home'},
+      {routeName: 'Play'}
+    ]);
+    
+    // replace without stack
+    navigation.replace("Home", {paramKey:"value"});
+    // or with object
+    navigation.replace({routeName:"Home", params:{paramKey:"value"}});
   };
   
   // ...
